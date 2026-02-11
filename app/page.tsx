@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// --- QUICK CHIPS: The most useful tags users actually want ---
+// --- QUICK CHIPS ---
 const QUICK_TAGS = [
   "No Prep", "Teamwork", "Relay", "Circle Game", 
   "Quiet", "Funny", "Competitive", "Trust"
@@ -22,7 +22,7 @@ export default function Home() {
   const [searchTag, setSearchTag] = useState("");
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false); // New state to track if search happened
+  const [hasSearched, setHasSearched] = useState(false);
   const [user, setUser] = useState<any>(null);
 
   // --- AUTH SESSION ---
@@ -45,12 +45,11 @@ export default function Home() {
     else alert("Saved to Library! ✨");
   };
 
-  // --- UPDATED SEARCH LOGIC ---
+  // --- SEARCH LOGIC ---
   const handleGenerate = async () => {
     setLoading(true);
     setHasSearched(true);
     
-    // Start with base query
     let query = supabase.from('activities').select('*').eq('status', 'approved');
 
     // Apply Filters
@@ -59,18 +58,15 @@ export default function Home() {
     if (selectedSizes.length > 0) query = query.overlaps('group_size', [...selectedSizes, "any"]);
     if (materialFilter !== "any") query = query.eq('materials', materialFilter);
 
-    // SMARTER SEARCH: Searches Title OR Description OR Tags
+    // Specific Search
     if (searchTag.trim() !== "") {
       const term = searchTag.trim();
-      // This syntax searches multiple columns at once
       query = query.or(`title.ilike.%${term}%,description.ilike.%${term}%,tags.cs.{${term.toLowerCase()}}`);
     }
 
     const { data, error } = await query;
     if (!error && data) {
       setActivities(data.sort(() => Math.random() - 0.5));
-      
-      // Only increment popularity if we actually found something
       if (data.length > 0) {
         supabase.rpc('increment_popularity', { game_ids: data.map((g: any) => g.id) });
       }
@@ -78,11 +74,8 @@ export default function Home() {
     setLoading(false);
   };
 
-  // Helper to click a Quick Chip
   const addTag = (tag: string) => {
     setSearchTag(tag);
-    // Optional: Auto-search when clicking a chip
-    // handleGenerate(); 
   };
 
   const FilterButton = ({ label, isSelected, onClick, color = "blue" }: any) => (
@@ -106,14 +99,15 @@ export default function Home() {
       </div>
 
       <div className="max-w-6xl mx-auto relative z-10">
-        {/* NAVBAR */}
-        <nav className="flex flex-col sm:flex-row justify-between items-center mb-16 gap-6">
+        
+        {/* UPDATED BRANDING NAVBAR */}
+        <nav className="flex flex-col sm:flex-row justify-between items-center mb-12 gap-6">
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
-            <span className="text-3xl md:text-4xl font-black italic text-white uppercase tracking-tighter leading-none">
-              EVAN'S GENERATOR
+            <span className="text-5xl md:text-6xl font-black italic text-white uppercase tracking-tighter leading-none">
+              EAG
             </span>
-            <span className="text-[7px] md:text-[8px] font-black text-blue-500 tracking-[0.4em] uppercase mt-2">
-              Community Driven Activity Generator
+            <span className="text-[9px] md:text-[10px] font-black text-blue-500 tracking-[0.3em] uppercase mt-1">
+              Evan's Activity Generator
             </span>
           </div>
           <div className="flex flex-wrap justify-center gap-4 items-center">
@@ -127,47 +121,25 @@ export default function Home() {
           </div>
         </nav>
 
-        {/* HERO FILTER SECTION */}
-        <div className="bg-white/5 backdrop-blur-3xl p-6 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border border-white/10 shadow-2xl mb-16">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        {/* MAIN CONTROL PANEL */}
+        <div className="bg-white/5 backdrop-blur-3xl p-6 md:p-10 rounded-[2.5rem] md:rounded-[3rem] border border-white/10 shadow-2xl mb-16">
+          
+          {/* SECTION 1: PRIMARY FILTERS (First) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
             <div className="space-y-8">
-              <div>
-                <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-4">Quick Search</label>
-                <div className="relative">
-                   <input 
-                    type="text" 
-                    placeholder="Search 'Tag', 'Ball', 'Funny'..." 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all uppercase italic pl-5"
-                    value={searchTag}
-                    onChange={(e) => setSearchTag(e.target.value)}
-                  />
-                  {searchTag && (
-                    <button 
-                      onClick={() => setSearchTag("")}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                    >
-                      ✕
-                    </button>
-                  )}
+               <div>
+                  <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 block mb-4">Core Categories</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {["Active Sport", "Art", "Icebreaker", "Quiet / Indoor", "Learning Lab", "Adapted / Sensory"].map(c => (
+                      <FilterButton key={c} color="purple" label={c} isSelected={selectedCats.includes(c)} onClick={() => setSelectedCats(prev => prev.includes(c) ? prev.filter(i => i !== c) : [...prev, c])} />
+                    ))}
+                  </div>
                 </div>
-                
-                {/* --- QUICK CHIPS SECTION --- */}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {QUICK_TAGS.map(tag => (
-                    <button 
-                      key={tag}
-                      onClick={() => addTag(tag)}
-                      className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-full text-[8px] uppercase tracking-wider text-slate-400 hover:text-white transition-all"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                <div>
-                  <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-4">Ages</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+               <div>
+                  <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 block mb-4">Ages</label>
                   <div className="flex flex-wrap gap-2">
                     {["4-5", "6-8", "9-12", "13+"].map(a => (
                       <FilterButton key={a} label={a} isSelected={selectedAges.includes(a)} onClick={() => setSelectedAges(prev => prev.includes(a) ? prev.filter(i => i !== a) : [...prev, a])} />
@@ -175,33 +147,68 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-4">Group Size</label>
+                  <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 block mb-4">Group Size</label>
                   <div className="flex flex-wrap gap-2">
                     {["2-10", "11-24", "25+"].map(s => (
                       <FilterButton key={s} color="green" label={s} isSelected={selectedSizes.includes(s)} onClick={() => setSelectedSizes(prev => prev.includes(s) ? prev.filter(i => i !== s) : [...prev, s])} />
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="space-y-8">
-              <div>
-                <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-4">Core Categories</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2">
-                  {["Active Sport", "Art", "Icebreaker", "Quiet / Indoor", "Learning Lab", "Adapted / Sensory"].map(c => (
-                    <FilterButton key={c} color="purple" label={c} isSelected={selectedCats.includes(c)} onClick={() => setSelectedCats(prev => prev.includes(c) ? prev.filter(i => i !== c) : [...prev, c])} />
-                  ))}
-                </div>
-              </div>
-              <button 
-                onClick={handleGenerate} 
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-6 rounded-2xl transition-all uppercase tracking-[0.3em] text-[10px] md:text-xs shadow-2xl shadow-blue-500/20 active:scale-[0.98]"
-              >
-                {loading ? "Searching Database..." : "Find Activities"}
-              </button>
             </div>
           </div>
+
+          {/* DIVIDER */}
+          <div className="w-full h-px bg-white/5 mb-10"></div>
+
+          {/* SECTION 2: SPECIFIC SEARCH (Last) */}
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row gap-4 items-end">
+                <div className="w-full">
+                    <div className="flex justify-between items-baseline mb-4">
+                        <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-500">Specific Search</label>
+                        <span className="text-[9px] text-slate-600 italic hidden sm:block">
+                             *Disclaimer: Best to leave blank. Only use for specific items.
+                        </span>
+                    </div>
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            placeholder="Optional: Type 'Tag', 'Ball', 'Funny'..." 
+                            className="w-full bg-black/20 border border-white/5 rounded-xl p-4 text-white font-bold outline-none focus:ring-2 focus:ring-blue-500/40 text-sm transition-all uppercase placeholder:normal-case placeholder:text-slate-600"
+                            value={searchTag}
+                            onChange={(e) => setSearchTag(e.target.value)}
+                        />
+                         {searchTag && (
+                            <button onClick={() => setSearchTag("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">✕</button>
+                        )}
+                    </div>
+                     <span className="text-[9px] text-slate-600 italic block sm:hidden mt-2">
+                         *Filters work best. Only use keywords for specific items.
+                    </span>
+                </div>
+                
+                <button 
+                    onClick={handleGenerate} 
+                    className="w-full md:w-auto px-10 bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl transition-all uppercase tracking-[0.2em] text-[10px] shadow-xl shadow-blue-500/20 active:scale-[0.98] whitespace-nowrap h-[54px]"
+                >
+                    {loading ? "..." : "Generate Activities"}
+                </button>
+            </div>
+
+            {/* QUICK CHIPS (Optional Helper) */}
+            <div className="flex flex-wrap gap-2 pt-2">
+                {QUICK_TAGS.map(tag => (
+                <button 
+                    key={tag}
+                    onClick={() => addTag(tag)}
+                    className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-[8px] uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-all"
+                >
+                    {tag}
+                </button>
+                ))}
+            </div>
+          </div>
+
         </div>
 
         {/* RESULTS GRID OR EMPTY STATE */}
@@ -238,7 +245,7 @@ export default function Home() {
           hasSearched && !loading && (
             <div className="text-center py-20 opacity-50">
               <h3 className="text-xl font-bold text-slate-400 mb-2">No activities found</h3>
-              <p className="text-sm text-slate-600">Try selecting fewer filters or checking a different category.</p>
+              <p className="text-sm text-slate-600">Try clearing the text search or selecting fewer filters.</p>
             </div>
           )
         )}
