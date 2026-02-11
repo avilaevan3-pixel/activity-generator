@@ -1,65 +1,194 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
+  
+  // --- STATE ---
+  const [selectedAges, setSelectedAges] = useState<string[]>([]);
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [materialFilter, setMaterialFilter] = useState("any");
+  const [searchTag, setSearchTag] = useState("");
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  // --- AUTH SESSION ---
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // --- PERFORMANCE: TRENDING MEMO ---
+  const trendingGames = useMemo(() => {
+    return [...activities].sort((a, b) => (b.popularity || 0) - (a.popularity || 0)).slice(0, 2);
+  }, [activities]);
+
+  const handleFavorite = async (activityId: number) => {
+    if (!user) return alert("Please login to save favorites!");
+    const { error } = await supabase.from("favorites").insert([{ user_id: user.id, activity_id: activityId }]);
+    if (error) alert(error.code === '23505' ? "Already in library!" : "Error saving.");
+    else alert("Saved to Library! ✨");
+  };
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    let query = supabase.from('activities').select('*').eq('status', 'approved');
+
+    if (selectedAges.length > 0) query = query.overlaps('age_group', [...selectedAges, "any"]);
+    if (selectedCats.length > 0) query = query.overlaps('category', selectedCats);
+    if (selectedSizes.length > 0) query = query.overlaps('group_size', [...selectedSizes, "any"]);
+    if (materialFilter !== "any") query = query.eq('materials', materialFilter);
+    if (searchTag.trim() !== "") query = query.contains('tags', [searchTag.trim().toLowerCase()]);
+
+    const { data, error } = await query;
+    if (!error && data) {
+      setActivities(data.sort(() => Math.random() - 0.5));
+      supabase.rpc('increment_popularity', { game_ids: data.map((g: any) => g.id) });
+    }
+    setLoading(false);
+  };
+
+  const FilterButton = ({ label, isSelected, onClick, color = "blue" }: any) => (
+    <button 
+      onClick={onClick} 
+      className={`px-3 md:px-4 py-2 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all border ${
+        isSelected 
+          ? `bg-${color}-600 text-white border-${color}-400 shadow-lg shadow-${color}-500/20 scale-105` 
+          : "bg-white/5 text-slate-500 border-white/5 hover:border-white/20"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-[#020617] text-slate-100 font-sans p-4 md:p-12 relative overflow-x-hidden text-left">
+      {/* GLOWS */}
+      <div className="fixed top-0 left-0 w-full h-full -z-10 pointer-events-none">
+        <div className="absolute top-[-5%] right-[-5%] w-[80%] md:w-[50%] h-[50%] bg-blue-600/10 blur-[100px] md:blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[-5%] left-[-5%] w-[80%] md:w-[50%] h-[50%] bg-purple-600/10 blur-[100px] md:blur-[120px] rounded-full"></div>
+      </div>
+
+      <div className="max-w-6xl mx-auto relative z-10">
+        {/* RESPONSIVE NAV */}
+        <nav className="flex flex-col sm:flex-row justify-between items-center mb-12 gap-6">
+          <div className="flex flex-col items-center sm:items-start">
+            <span className="text-3xl md:text-4xl font-black italic text-white uppercase tracking-tighter leading-none">EVAN'S GEN</span>
+            <span className="text-[7px] md:text-[8px] font-black text-blue-500 tracking-[0.5em] uppercase mt-2">Activity Intelligence</span>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4 items-center">
+            <Link href="/account" className="text-slate-500 text-[9px] md:text-[10px] font-black uppercase tracking-widest hover:text-white">Library</Link>
+            {user ? (
+              <button onClick={() => supabase.auth.signOut()} className="text-red-500/50 text-[9px] md:text-[10px] font-black uppercase">Logout</button>
+            ) : (
+              <Link href="/login" className="text-blue-400 text-[9px] md:text-[10px] font-black uppercase">Login</Link>
+            )}
+            <Link href="/add" className="bg-white text-black px-5 py-2.5 md:px-6 md:py-3 rounded-full text-[9px] md:text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">+ Submit</Link>
+          </div>
+        </nav>
+
+        {/* MOBILE OPTIMIZED FILTER SECTION */}
+        <div className="bg-white/5 backdrop-blur-3xl p-6 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border border-white/10 shadow-2xl mb-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
+            <div className="space-y-6 md:space-y-8">
+              <div>
+                <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-3 md:mb-4">Search Tags</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. 'gym', 'strategy'..." 
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 md:p-5 text-white font-bold outline-none focus:border-blue-500/50 transition-all uppercase italic"
+                  value={searchTag}
+                  onChange={(e) => setSearchTag(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-3">Ages</label>
+                  <div className="flex flex-wrap gap-2">
+                    {["4-5", "6-8", "9-12", "13+"].map(a => (
+                      <FilterButton key={a} label={a} isSelected={selectedAges.includes(a)} onClick={() => setSelectedAges(prev => prev.includes(a) ? prev.filter(i => i !== a) : [...prev, a])} />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-3">Group Size</label>
+                  <div className="flex flex-wrap gap-2">
+                    {["2-10", "11-24", "25+"].map(s => (
+                      <FilterButton key={s} color="green" label={s} isSelected={selectedSizes.includes(s)} onClick={() => setSelectedSizes(prev => prev.includes(s) ? prev.filter(i => i !== s) : [...prev, s])} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6 md:space-y-8">
+              <div>
+                <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 block mb-3 md:mb-4">Categories</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2">
+                  {["Active Sport", "Art", "Icebreaker", "Quiet / Indoor", "Learning Lab", "Adapted / Sensory"].map(c => (
+                    <FilterButton key={c} color="purple" label={c} isSelected={selectedCats.includes(c)} onClick={() => setSelectedCats(prev => prev.includes(c) ? prev.filter(i => i !== c) : [...prev, c])} />
+                  ))}
+                </div>
+              </div>
+              <button 
+                onClick={handleGenerate} 
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-5 md:py-6 rounded-2xl transition-all uppercase tracking-[0.3em] text-[10px] md:text-xs shadow-2xl"
+              >
+                {loading ? "Optimizing..." : "Initialize Generator"}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* RESULTS GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 pb-32">
+          {activities.map((item: any) => (
+            <div key={item.id} className="p-8 md:p-10 bg-white/5 backdrop-blur-xl rounded-[2.5rem] md:rounded-[3rem] border border-white/5 hover:border-blue-500/30 transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-start mb-6">
+                  <h2 className="text-2xl md:text-3xl font-black text-white uppercase italic leading-none">{item.title}</h2>
+                  <button onClick={() => handleFavorite(item.id)} className="text-slate-700 hover:text-pink-500 transition-all text-xl md:text-2xl">♥</button>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {item.category?.map((c: string) => <span key={c} className="text-[7px] font-black px-2 py-1 bg-white/5 text-slate-400 rounded-full border border-white/10 uppercase tracking-widest">{c}</span>)}
+                  <span className="text-[7px] font-black px-2 py-1 bg-green-500/10 text-green-400 rounded-full border border-green-500/10 uppercase tracking-widest">{item.group_size?.join(", ")} Players</span>
+                </div>
+                <p className="text-slate-400 text-xs md:text-sm leading-relaxed mb-8 md:mb-10 font-medium">"{item.description}"</p>
+                <div className="grid grid-cols-2 gap-4 md:gap-6 pt-6 md:pt-8 border-t border-white/5">
+                  <div>
+                    <span className="text-[7px] md:text-[8px] uppercase text-green-500 font-black tracking-widest block mb-2">Easier</span>
+                    <p className="text-[9px] md:text-[10px] text-slate-500 leading-tight">{item.make_it_easier || 'Consult instructor'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[7px] md:text-[8px] uppercase text-red-500 font-black tracking-widest block mb-2">Harder</span>
+                    <p className="text-[9px] md:text-[10px] text-slate-500 leading-tight">{item.make_it_harder || 'Consult instructor'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      </main>
-    </div>
+
+        {/* RESTORED ADMIN FOOTER LINK */}
+        <footer className="py-20 text-center border-t border-white/5">
+          <Link href="/admin" className="text-slate-800 hover:text-blue-500 text-[10px] font-black uppercase tracking-[0.5em] transition-all">
+            — Admin Terminal —
+          </Link>
+        </footer>
+      </div>
+    </main>
   );
 }
