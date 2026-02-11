@@ -90,7 +90,7 @@ export default function Home() {
               EVAN'S GENERATOR
             </span>
             <span className="text-[7px] md:text-[8px] font-black text-blue-500 tracking-[0.4em] uppercase mt-2">
-              Community Driven Activity Generator
+              AI Driven Activity Generator
             </span>
           </div>
           <div className="flex flex-wrap justify-center gap-4 items-center">
