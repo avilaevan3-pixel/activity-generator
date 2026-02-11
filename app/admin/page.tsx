@@ -5,15 +5,16 @@ import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// --- CONFIGURATION ---
-const ADMIN_CODE = "york2026"; 
+// --- SECURITY CONFIGURATION ---
+// REPLACE THIS with your actual email address(es)
+const ADMIN_EMAILS = ["avilaevan3@gmail.com"]; 
 
 export default function AdminConsole() {
   const router = useRouter();
 
   // --- STATE ---
   const [authorized, setAuthorized] = useState(false);
-  const [inputCode, setInputCode] = useState("");
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [loading, setLoading] = useState(true);
   
   // Data State
@@ -35,9 +36,29 @@ export default function AdminConsole() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>(null);
 
-  // --- INITIAL LOAD ---
+  // --- INITIAL SECURITY CHECK ---
   useEffect(() => {
-    fetchData();
+    const checkUser = async () => {
+      setCheckingAuth(true);
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        // Not logged in at all
+        setAuthorized(false);
+      } else if (session.user.email && ADMIN_EMAILS.includes(session.user.email)) {
+        // Logged in AND email matches the whitelist
+        setAuthorized(true);
+        fetchData(); // Only fetch data if authorized
+      } else {
+        // Logged in, but wrong email
+        setAuthorized(false);
+      }
+      
+      setCheckingAuth(false);
+    };
+
+    checkUser();
   }, []);
 
   const fetchData = async () => {
@@ -55,22 +76,18 @@ export default function AdminConsole() {
       setActivities(approved);
       setPending(pendingGames);
       
-      // --- ADVANCED ANALYTICS CALCULATION ---
+      // Analytics Logic
       const cats: any = {};
       const ages: any = {};
       const prep: any = {};
       
       approved.forEach(game => {
-        // Count Categories
         game.category?.forEach((c: string) => cats[c] = (cats[c] || 0) + 1);
-        // Count Ages
         game.age_group?.forEach((a: string) => ages[a] = (ages[a] || 0) + 1);
-        // Count Prep
         const p = game.materials || "Unknown";
         prep[p] = (prep[p] || 0) + 1;
       });
 
-      // Calculate Gaps (What are we missing?)
       const gaps = [];
       if ((ages["4-5"] || 0) < approved.length * 0.1) gaps.push("Low on '4-5 Year Old' content");
       if ((cats["Learning Lab"] || 0) < approved.length * 0.15) gaps.push("Low on 'Learning Lab' activities");
@@ -146,25 +163,31 @@ export default function AdminConsole() {
     );
   };
 
-  // --- AUTH SCREEN ---
+  // --- UNAUTHORIZED STATE ---
+  if (checkingAuth) {
+    return <div className="min-h-screen bg-[#020617] flex items-center justify-center text-slate-500 text-xs font-black uppercase tracking-widest">Scanning Retina...</div>;
+  }
+
   if (!authorized) {
     return (
       <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-4">
         <div className="bg-white/5 border border-white/10 p-10 rounded-3xl backdrop-blur-xl text-center max-w-md w-full">
-          <h1 className="text-3xl font-black text-white mb-2 uppercase italic">Restricted Access</h1>
-          <input 
-            type="password" 
-            placeholder="Access Code"
-            className="w-full bg-black/50 border border-white/20 rounded-xl p-4 text-center text-white tracking-widest outline-none focus:border-blue-500 mb-4"
-            value={inputCode}
-            onChange={(e) => setInputCode(e.target.value)}
-          />
-          <button onClick={() => inputCode === ADMIN_CODE ? setAuthorized(true) : alert("Access Denied")} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-4 rounded-xl transition-all">Authenticate</button>
+          <h1 className="text-3xl font-black text-red-500 mb-2 uppercase italic">Access Denied</h1>
+          <p className="text-slate-400 mb-6 text-sm">You are not authorized to view the Master Terminal.</p>
+          <div className="flex flex-col gap-3">
+             <Link href="/login" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-4 rounded-xl transition-all">
+                Login as Admin
+             </Link>
+             <Link href="/" className="text-slate-600 text-xs hover:text-white transition-colors">
+                Return to Generator
+             </Link>
+          </div>
         </div>
       </div>
     );
   }
 
+  // --- AUTHORIZED DASHBOARD ---
   const filteredActivities = activities.filter(a => 
     a.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
     a.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -185,23 +208,20 @@ export default function AdminConsole() {
           <Link href="/" className="px-6 py-2 rounded-full border border-white/10 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">Live Site</Link>
         </nav>
 
-        {/* --- NEW: ANALYTICS DASHBOARD --- */}
+        {/* ANALYTICS DASHBOARD */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          
-          {/* CARD 1: TOTALS */}
+          {/* TOTALS */}
           <div className="bg-white/5 border border-white/10 p-6 rounded-3xl backdrop-blur-md flex flex-col justify-between">
             <div>
               <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black mb-2">Total Database</p>
               <span className="text-5xl font-black text-white">{stats.total}</span>
             </div>
             <div className="mt-4 pt-4 border-t border-white/5">
-              <p className="text-[10px] text-yellow-400 font-black uppercase tracking-widest">
-                 {stats.pending} Pending Review
-              </p>
+              <p className="text-[10px] text-yellow-400 font-black uppercase tracking-widest">{stats.pending} Pending Review</p>
             </div>
           </div>
 
-          {/* CARD 2: CATEGORY BREAKDOWN */}
+          {/* CATEGORIES */}
           <div className="bg-white/5 border border-white/10 p-6 rounded-3xl backdrop-blur-md">
             <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black mb-4">Category Balance</p>
             <StatBar label="Active Sport" value={stats.catBreakdown["Active Sport"] || 0} total={stats.total} color="bg-blue-500" />
@@ -210,7 +230,7 @@ export default function AdminConsole() {
             <StatBar label="Sensory" value={stats.catBreakdown["Adapted / Sensory"] || 0} total={stats.total} color="bg-pink-500" />
           </div>
 
-          {/* CARD 3: AGE & PREP */}
+          {/* AGE & PREP */}
           <div className="bg-white/5 border border-white/10 p-6 rounded-3xl backdrop-blur-md">
              <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black mb-4">Demographics</p>
              <StatBar label="4-5 Years" value={stats.ageBreakdown["4-5"] || 0} total={stats.total} color="bg-orange-500" />
@@ -220,7 +240,7 @@ export default function AdminConsole() {
              <StatBar label="No Materials" value={stats.prepBreakdown["No Materials"] || 0} total={stats.total} color="bg-emerald-400" />
           </div>
 
-          {/* CARD 4: THE GAP REPORT */}
+          {/* GAP REPORT */}
           <div className="bg-gradient-to-br from-red-500/10 to-purple-500/10 border border-white/10 p-6 rounded-3xl backdrop-blur-md">
             <p className="text-red-400 text-[10px] uppercase tracking-[0.2em] font-black mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
@@ -237,14 +257,13 @@ export default function AdminConsole() {
           </div>
         </div>
 
-        {/* SECTION 2: PENDING QUEUE */}
+        {/* PENDING QUEUE */}
         {pending.length > 0 && (
           <div className="mb-16">
              <div className="flex items-center gap-4 mb-6">
                 <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
                 <h2 className="text-xl font-black uppercase tracking-widest text-white">Incoming Transmissions</h2>
              </div>
-             
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {pending.map((item) => (
                   <div key={item.id} className="p-6 bg-yellow-500/5 border border-yellow-500/20 rounded-3xl relative overflow-hidden group">
@@ -267,7 +286,7 @@ export default function AdminConsole() {
           </div>
         )}
 
-        {/* SECTION 3: THE VAULT */}
+        {/* THE VAULT */}
         <div>
            <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-6 gap-4">
               <h2 className="text-xl font-black uppercase tracking-widest text-white">The Vault</h2>
